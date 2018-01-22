@@ -123,6 +123,17 @@
 
           map.on('click', this.clickEventFn, this);
           map.on('mousemove', this.moveEventFn, this);
+          map.on('contentmenu',function (e) {
+            clearTimeout(me.clickHandle);
+            me.clickHandle = 0;
+
+            if(me.options.show_last_node){
+              me.preClick(e);
+              me.getMouseClickHandler(e);
+            }
+
+            me.getDblClickHandler(e);
+          });
 
           this.resetRuler();
       },
