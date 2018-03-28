@@ -1,3 +1,5 @@
+import $ from "jquery";
+
 (function(){
 
   L.Control.LinearMeasurement = L.Control.extend({
@@ -18,6 +20,7 @@
         link = L.DomUtil.create('a', 'icon-ruler', container),
         map_container = map.getContainer(),
         me = this;
+      container.style.display = "none";
 
       link.href = '#';
       link.title = 'Toggle measurement tool';
@@ -98,7 +101,6 @@
           me.clickHandle = 0;
 
           if(me.options.show_last_node){
-            console.log('111111111');
             me.preClick(e);
             me.getMouseClickHandler(e);
           }
@@ -133,8 +135,10 @@
         }
       });
 
-      map.on('keypress',function (e) {
-        console.log(e);
+      $(document).on("keyup",function(event){
+        if(event.keyCode==27){
+          console.log("line-keyup");
+        }
       });
 
       this.resetRuler();
@@ -175,6 +179,8 @@
       this.multi = null;
       this.latlngs = null;
       this.latlngsList = [];
+      this.renderCircleList = [];
+      this.workSpaceList = [];
       this.sum = 0;
       this.distance = 0;
       this.separation = 1;
@@ -467,7 +473,7 @@
     },
 
     getMouseClickHandler: function(e){
-      var me = this;
+      var me = this,map = this._map;
       me.fixedLast = me.last;
       me.sum = 0;
 
@@ -495,7 +501,7 @@
 
       var s = dis.toFixed(2);
 
-      me.renderCircle(e.latlng, 0, me.layer, 'dot', parseInt(s) ? (s + ' ' + me.measure.unit) : '' );
+      me.renderCircleList.push(me.renderCircle(e.latlng, 0, me.layer, 'dot', parseInt(s) ? (s + ' ' + me.measure.unit) : '' ));
       me.prevLatlng = e.latlng;
 
       if(dis==0){
@@ -504,10 +510,11 @@
           '</div>'
         ].join('');
 
-        L.marker(e.latlng, {
+        var start = L.marker(e.latlng, {
           icon: L.divIcon({ className: 'total-popup', html: html }),
           clickable: false
         }).addTo(this.layer);
+        me.workSpaceList.push(start);
       }else{
         var azimut = '';
 
@@ -515,17 +522,16 @@
           return;
         }
 
-        this.layer.off('click');
+        //this.layer.off('click');
 
-        L.DomEvent.stop(e);
+        //L.DomEvent.stop(e);
 
         if(this.options.show_azimut){
           var style = 'color: '+this.options.contrastingColor+';';
           azimut = ' <span class="azimut azimut-final" style="'+style+'"> &nbsp; '+this.lastAzimut+'&deg;</span>';
         }
 
-        var workspace = this.layer,
-          label = this.measure.scalar + ' ' + this.measure.unit + ' ',
+        var label = this.measure.scalar + ' ' + this.measure.unit + ' ',
           total_scalar = this.measure.unit === this.SUB_UNIT ? this.measure.scalar/this.UNIT_CONV : this.measure.scalar,
           total_latlng = this.total.getLatLng(),
           total_label = this.total,
@@ -537,10 +543,12 @@
             '</div>'
           ].join('');
 
-        L.marker(e.latlng, {
+        var workspace = L.marker(e.latlng, {
           icon: L.divIcon({ className: 'total-popup', html: html }),
           clickable: true
         }).addTo(this.layer);
+
+        me.workSpaceList.push(workspace);
 
         var data = {
           total: this.measure,
@@ -550,8 +558,54 @@
         };
 
         var fireSelected = function(e){
+          var latlngs = [];
           if(L.DomUtil.hasClass(e.originalEvent.target, 'lineclose')){
-            //me.mainLayer.removeLayer(workspace);
+            console.log(me.latlngsList.length);
+            for(var i = 0;i < me.latlngsList.length;i++){
+              if(me.latlngsList[i][1].equals(e.latlng)){
+                //me.latlngsList.splice(i, 1);
+                if(me.latlngsList[i+1]){
+                  latlngs[0] = me.latlngsList[i][0];
+                  latlngs[1] = me.latlngsList[i+1][1];
+                  me.latlngsList.splice(i, 1);
+                  me.latlngsList.splice(i, 1, latlngs);
+                  map.removeLayer(me.renderCircleList[i + 1]);
+                  me.renderCircleList.splice(i + 1 , 1);
+                  me.workSpaceList.splice(i, 1);
+                  console.log(me.workSpaceList);
+                  var dis = 0;
+                  for(var j = 0;j<me.workSpaceList.length;j++){
+                    var azimut = '';
+
+                    if(me.options.show_azimut){
+                      var style = 'color: '+me.options.contrastingColor+';';
+                      azimut = ' <span class="azimut azimut-final" style="'+style+'"> &nbsp; '+this.lastAzimut+'&deg;</span>';
+                    }
+
+                    if(me.workSpaceList[j - 1]){
+                      dis = dis + me.workSpaceList[j - 1].getLatLng().distanceTo(me.workSpaceList[j].getLatLng())/me.UNIT_CONV;
+                      var label = dis.toFixed(2) + ' ' + me.measure.unit + ' ',
+                        html = [
+                          '<div class="total-popup-content" style="background-color:'+me.options.color+'; color: '+me.options.contrastingColor+'">' + label + azimut,
+                          '  <svg class="lineclose" viewbox="0 0 45 35">',
+                          '   <path style="stroke: '+me.options.contrastingColor+'" class="lineclose" d="M 10,10 L 30,30 M 30,10 L 10,30" />',
+                          '  </svg>',
+                          '</div>'
+                        ].join('');
+                      me.workSpaceList[j].setIcon(L.divIcon({className: 'total-popup',html: html }));
+                      console.log(dis);
+                    }
+                  }
+                }else{
+
+                }
+              }
+            }
+            //console.log(e);
+            //console.log(me);
+            map.removeLayer(workspace);
+            me.multi.setLatLngs(me.latlngsList);
+            me.multi.redraw();
           } else {
             workspace.fireEvent('selected', data);
           }
@@ -633,17 +687,17 @@
           var multi_latlngs = this.multi.getLatLngs();
 
           for(var s in multi_latlngs){
-            dimension += this.displayMarkers.apply(this, [multi_latlngs[s], true, dimension]);
+            //dimension += this.displayMarkers.apply(this, [multi_latlngs[s], true, dimension]);
           }
 
-          this.displayMarkers.apply(this, [this.poly.getLatLngs(), false, this.sum]);
+          //this.displayMarkers.apply(this, [this.poly.getLatLngs(), false, this.sum]);
 
           /* Review that the dots are in correct units */
-          this.convertDots();
+          //this.convertDots();
 
         } else {
           this.cleanUpMarkers();
-          this.displayMarkers.apply(this, [this.poly.getLatLngs(), false, this.sum]);
+          //this.displayMarkers.apply(this, [this.poly.getLatLngs(), false, this.sum]);
         }
       }else{
         var html = '<span class="total-popup-content" style="background-color:'+this.options.color+'; color: '+this.options.contrastingColor+'">点击确定起点'+'</span>';
@@ -731,39 +785,6 @@
       if(this._map.tap) {
         this._map.tap.enable();
       }
-
-      this.layer = null;
-      this.prevLatlng = null;
-      this.poly = null;
-      this.multi = null;
-      this.latlngs = null;
-      this.latlngsList = [];
-      this.sum = 0;
-      this.distance = 0;
-      this.separation = 1;
-      this.last = 0;
-      this.fixedLast = 0;
-      this.totalIcon = null;
-      this.total = null;
-      this.lastCircle = null;
-
-      /* Leaflet return distances in meters */
-      this.UNIT_CONV = 1000;
-      this.SUB_UNIT_CONV = 1000;
-      this.UNIT = 'km';
-      this.SUB_UNIT = 'm';
-
-      if(this.options.unitSystem === 'imperial'){
-        this.UNIT_CONV = 1609.344;
-        this.SUB_UNIT_CONV = 5280;
-        this.UNIT = 'mi';
-        this.SUB_UNIT = 'ft';
-      }
-
-      this.measure = {
-        scalar: 0,
-        unit: this.SUB_UNIT
-      };
     },
 
     purgeLayers: function(layers){
