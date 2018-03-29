@@ -181,6 +181,7 @@ import $ from "jquery";
       this.latlngsList = [];
       this.renderCircleList = [];
       this.workSpaceList = [];
+      //this.lastWorkSpace = null;
       this.sum = 0;
       this.distance = 0;
       this.separation = 1;
@@ -550,6 +551,8 @@ import $ from "jquery";
 
         me.workSpaceList.push(workspace);
 
+        //console.log(me.workSpaceList);
+
         var data = {
           total: this.measure,
           total_label: total_label,
@@ -560,10 +563,17 @@ import $ from "jquery";
         var fireSelected = function(e){
           var latlngs = [];
           if(L.DomUtil.hasClass(e.originalEvent.target, 'lineclose')){
-            console.log(me.latlngsList.length);
+            map.removeLayer(workspace);
             for(var i = 0;i < me.latlngsList.length;i++){
               if(me.latlngsList[i][1].equals(e.latlng)){
                 //me.latlngsList.splice(i, 1);
+                var azimut = '';
+
+                if(me.options.show_azimut){
+                  var style = 'color: '+me.options.contrastingColor+';';
+                  azimut = ' <span class="azimut azimut-final" style="'+style+'"> &nbsp; '+this.lastAzimut+'&deg;</span>';
+                }
+                //console.log(me);
                 if(me.latlngsList[i+1]){
                   latlngs[0] = me.latlngsList[i][0];
                   latlngs[1] = me.latlngsList[i+1][1];
@@ -571,19 +581,15 @@ import $ from "jquery";
                   me.latlngsList.splice(i, 1, latlngs);
                   map.removeLayer(me.renderCircleList[i + 1]);
                   me.renderCircleList.splice(i + 1 , 1);
-                  me.workSpaceList.splice(i, 1);
-                  console.log(me.workSpaceList);
+                  //me.workSpaceList.splice(i, 1);
                   var dis = 0;
-                  for(var j = 0;j<me.workSpaceList.length;j++){
-                    var azimut = '';
-
-                    if(me.options.show_azimut){
-                      var style = 'color: '+me.options.contrastingColor+';';
-                      azimut = ' <span class="azimut azimut-final" style="'+style+'"> &nbsp; '+this.lastAzimut+'&deg;</span>';
-                    }
-
-                    if(me.workSpaceList[j - 1]){
-                      dis = dis + me.workSpaceList[j - 1].getLatLng().distanceTo(me.workSpaceList[j].getLatLng())/me.UNIT_CONV;
+                  for(var j = 1;j<me.workSpaceList.length;j++){
+                    if(me.workSpaceList[j]._icon != null){
+                      var x = 1;
+                      while (me.workSpaceList[j - x]._icon == null){
+                        x++;
+                      }
+                      dis = dis + me.workSpaceList[j - x].getLatLng().distanceTo(me.workSpaceList[j].getLatLng())/me.UNIT_CONV;
                       var label = dis.toFixed(2) + ' ' + me.measure.unit + ' ',
                         html = [
                           '<div class="total-popup-content" style="background-color:'+me.options.color+'; color: '+me.options.contrastingColor+'">' + label + azimut,
@@ -593,17 +599,62 @@ import $ from "jquery";
                           '</div>'
                         ].join('');
                       me.workSpaceList[j].setIcon(L.divIcon({className: 'total-popup',html: html }));
-                      console.log(dis);
                     }
                   }
+                  var last_dis = 0;
+                  for(var j = me.workSpaceList.length - 1;j>= 0;j--){
+                    if(me.workSpaceList[j]._icon != null){
+                      if(me.workSpaceList[j]._icon.innerText.split(" ")[0].indexOf('起点') >= 0){
+                        last_dis = me.latlngs[1].distanceTo(me.latlngs[0])/me.UNIT_CONV;
+                      }else{
+                        last_dis = parseFloat(me.workSpaceList[j]._icon.innerText.split(" ")[0]) + me.latlngs[1].distanceTo(me.workSpaceList[j].getLatLng())/me.UNIT_CONV;;
+                      }
+                      break;
+                    }
+                  }
+                  var label = last_dis.toFixed(2) + ' ' + me.measure.unit + ' ',
+                    html = [
+                      '<div class="total-popup-content" style="background-color:'+me.options.color+'; color: '+me.options.contrastingColor+'">' + label + azimut,
+                      '  <svg class="dlineclose" viewbox="0 0 45 35">',
+                      '   <path style="stroke: '+me.options.contrastingColor+'" class="dlineclose" d="M 10,10 L 30,30 M 30,10 L 10,30" />',
+                      '  </svg>',
+                      '</div>'
+                    ].join('');
+                  me.totalIcon = L.divIcon({ className: 'total-popup', html: html });
+                  me.total.setIcon(me.totalIcon);
                 }else{
-
+                  me.poly.setLatLngs([me.latlngs[1],me.latlngsList[me.latlngsList.length-1][0]]);
+                  var dis = me.latlngs[1].distanceTo(me.latlngsList[me.latlngsList.length-1][0])/me.UNIT_CONV;
+                  for(var j = me.workSpaceList.length - 1;j>= 0;j--){
+                    if(me.workSpaceList[j]._icon != null){
+                      if(me.workSpaceList[j]._icon.innerText.split(" ")[0].indexOf('起点') >= 0){
+                        dis = dis;
+                      }else{
+                        dis = parseFloat(me.workSpaceList[j]._icon.innerText.split(" ")[0]) + dis;
+                      }
+                      break;
+                    }
+                  }
+                  me.latlngsList.splice(i, 1);
+                  map.removeLayer(me.renderCircleList[i + 1]);
+                  me.renderCircleList.splice(i + 1 , 1);
+                  //me.workSpaceList.splice(i + 1, 1);
+                  me.poly.redraw();
+                  var label = dis.toFixed(2) + ' ' + me.measure.unit + ' ',
+                    html = [
+                      '<div class="total-popup-content" style="background-color:'+me.options.color+'; color: '+me.options.contrastingColor+'">' + label + azimut,
+                      '  <svg class="dlineclose" viewbox="0 0 45 35">',
+                      '   <path style="stroke: '+me.options.contrastingColor+'" class="dlineclose" d="M 10,10 L 30,30 M 30,10 L 10,30" />',
+                      '  </svg>',
+                      '</div>'
+                    ].join('');
+                  me.totalIcon = L.divIcon({ className: 'total-popup', html: html });
+                  me.total.setIcon(me.totalIcon);
                 }
               }
             }
             //console.log(e);
             //console.log(me);
-            map.removeLayer(workspace);
             me.multi.setLatLngs(me.latlngsList);
             me.multi.redraw();
           } else {
@@ -748,6 +799,8 @@ import $ from "jquery";
           '  </svg>',
           '</div>'
         ].join('');
+
+      //me.lastWorkSpace = workspace;
 
       this.totalIcon = L.divIcon({ className: 'total-popup', html: html });
       this.total.setIcon(this.totalIcon);
